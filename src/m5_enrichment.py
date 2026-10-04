@@ -16,7 +16,7 @@ if hasattr(sys.stderr, "reconfigure"):
 from dataclasses import dataclass, field
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import OPENAI_API_KEY
+from config import OPENAI_API_KEY, get_llm_client
 
 
 @dataclass
@@ -38,22 +38,21 @@ def summarize_chunk(text: str) -> str:
     Tạo summary ngắn cho chunk.
     Embed summary thay vì (hoặc cùng với) raw chunk → giảm noise.
     """
-    if OPENAI_API_KEY and not OPENAI_API_KEY.startswith("sk-..."):
+    client, model = get_llm_client()
+    if client:
         try:
-            from openai import OpenAI
-            client = OpenAI(api_key=OPENAI_API_KEY)
             resp = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=model,
                 messages=[
                     {"role": "system", "content": "Tóm tắt đoạn văn sau trong 2-3 câu ngắn gọn bằng tiếng Việt."},
                     {"role": "user", "content": text},
                 ],
                 max_tokens=150,
-                timeout=10,
+                timeout=15,
             )
             return resp.choices[0].message.content.strip()
         except Exception as e:
-            print(f"  ⚠️  OpenAI summarize failed: {e}")
+            print(f"  ⚠️  LLM summarize failed: {e}")
 
     # Extractive fallback
     sentences = [s.strip() for s in text.replace("\n", " ").split(". ") if s.strip()]
@@ -71,23 +70,22 @@ def generate_hypothesis_questions(text: str, n_questions: int = 3) -> list[str]:
     Generate câu hỏi mà chunk có thể trả lời.
     Index cả questions lẫn chunk → query match tốt hơn (bridge vocabulary gap).
     """
-    if OPENAI_API_KEY and not OPENAI_API_KEY.startswith("sk-..."):
+    client, model = get_llm_client()
+    if client:
         try:
-            from openai import OpenAI
-            client = OpenAI(api_key=OPENAI_API_KEY)
             resp = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=model,
                 messages=[
                     {"role": "system", "content": f"Dựa trên đoạn văn, tạo {n_questions} câu hỏi mà đoạn văn có thể trả lời. Trả về mỗi câu hỏi trên 1 dòng."},
                     {"role": "user", "content": text},
                 ],
                 max_tokens=200,
-                timeout=10,
+                timeout=15,
             )
             questions = resp.choices[0].message.content.strip().split("\n")
             return [q.strip().lstrip("0123456789.-) ") for q in questions if q.strip()][:n_questions]
         except Exception as e:
-            print(f"  ⚠️  OpenAI HyQA failed: {e}")
+            print(f"  ⚠️  LLM HyQA failed: {e}")
 
     # Extractive fallback
     import re
@@ -108,23 +106,22 @@ def contextual_prepend(text: str, document_title: str = "") -> str:
     Prepend context giải thích chunk nằm ở đâu trong document.
     Anthropic benchmark: giảm 49% retrieval failure (alone).
     """
-    if OPENAI_API_KEY and not OPENAI_API_KEY.startswith("sk-..."):
+    client, model = get_llm_client()
+    if client:
         try:
-            from openai import OpenAI
-            client = OpenAI(api_key=OPENAI_API_KEY)
             resp = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=model,
                 messages=[
                     {"role": "system", "content": "Viết 1 câu ngắn mô tả đoạn văn này nằm ở đâu trong tài liệu và nói về chủ đề gì. Chỉ trả về 1 câu."},
                     {"role": "user", "content": f"Tài liệu: {document_title}\n\nĐoạn văn:\n{text}"},
                 ],
                 max_tokens=80,
-                timeout=10,
+                timeout=15,
             )
             context = resp.choices[0].message.content.strip()
             return f"{context}\n\n{text}"
         except Exception as e:
-            print(f"  ⚠️  OpenAI contextual failed: {e}")
+            print(f"  ⚠️  LLM contextual failed: {e}")
 
     prefix = f"Trích từ {document_title}.\n\n" if document_title else ""
     return f"{prefix}{text}"
@@ -137,24 +134,23 @@ def extract_metadata(text: str) -> dict:
     """
     LLM extract metadata tự động: topic, entities, date_range, category.
     """
-    if OPENAI_API_KEY and not OPENAI_API_KEY.startswith("sk-..."):
+    client, model = get_llm_client()
+    if client:
         try:
             import json as _json
-            from openai import OpenAI
-            client = OpenAI(api_key=OPENAI_API_KEY)
             resp = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=model,
                 messages=[
                     {"role": "system", "content": 'Trích xuất metadata từ đoạn văn. Trả về JSON: {"topic": "...", "entities": ["..."], "category": "policy|hr|it|finance", "language": "vi|en"}'},
                     {"role": "user", "content": text},
                 ],
                 response_format={"type": "json_object"},
                 max_tokens=150,
-                timeout=10,
+                timeout=15,
             )
             return _json.loads(resp.choices[0].message.content)
         except Exception as e:
-            print(f"  ⚠️  OpenAI metadata failed: {e}")
+            print(f"  ⚠️  LLM metadata failed: {e}")
 
     return {"topic": "general", "entities": [], "category": "policy", "language": "vi"}
 
@@ -167,13 +163,12 @@ def _enrich_single_call(text: str, source: str) -> dict:
 
     ⚠️ Cost optimization: 1 API call thay vì 4 calls riêng lẻ.
     """
-    if OPENAI_API_KEY and not OPENAI_API_KEY.startswith("sk-..."):
+    client, model = get_llm_client()
+    if client:
         try:
             import json as _json
-            from openai import OpenAI
-            client = OpenAI(api_key=OPENAI_API_KEY)
             resp = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=model,
                 messages=[
                     {"role": "system", "content": """Phân tích đoạn văn và trả về JSON:
 {
@@ -186,7 +181,7 @@ def _enrich_single_call(text: str, source: str) -> dict:
                 ],
                 response_format={"type": "json_object"},
                 max_tokens=400,
-                timeout=10,
+                timeout=15,
             )
             return _json.loads(resp.choices[0].message.content)
         except Exception as e:
