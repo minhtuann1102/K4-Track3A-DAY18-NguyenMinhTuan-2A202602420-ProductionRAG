@@ -126,9 +126,8 @@ def _compute_offline_metrics(questions: list[str], answers: list[str],
 def evaluate_ragas(questions: list[str], answers: list[str],
                    contexts: list[list[str]], ground_truths: list[str]) -> dict:
     """Run RAGAS evaluation with offline fallback if API key is not configured."""
-    has_gemini = bool(GEMINI_API_KEY and not GEMINI_API_KEY.startswith("AIzaSy..."))
     has_openai = bool(OPENAI_API_KEY and not OPENAI_API_KEY.startswith("sk-..."))
-    if has_gemini or has_openai:
+    if has_openai:
         try:
             from ragas import evaluate
             from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall
@@ -140,23 +139,9 @@ def evaluate_ragas(questions: list[str], answers: list[str],
                 "contexts": contexts,
                 "ground_truth": ground_truths,
             })
-            kwargs = {}
-            if has_gemini:
-                try:
-                    from langchain_openai import ChatOpenAI
-                    kwargs["llm"] = ChatOpenAI(
-                        api_key=GEMINI_API_KEY,
-                        base_url=GEMINI_BASE_URL,
-                        model="gemini-1.5-flash",
-                        temperature=0,
-                    )
-                except Exception:
-                    pass
-
             result = evaluate(
                 dataset,
                 metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
-                **kwargs
             )
             df = result.to_pandas()
             per_question = [

@@ -21,7 +21,8 @@ def get_llm_client():
                 base_url=GEMINI_BASE_URL,
                 timeout=30.0,
             )
-            return client, "gemini-1.5-flash"
+            model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+            return client, model
         except Exception:
             pass
 

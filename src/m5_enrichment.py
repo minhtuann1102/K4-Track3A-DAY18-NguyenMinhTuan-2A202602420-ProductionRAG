@@ -44,13 +44,16 @@ def summarize_chunk(text: str) -> str:
             resp = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "Tóm tắt đoạn văn sau trong 2-3 câu ngắn gọn bằng tiếng Việt."},
+                    {"role": "system", "content": "Tóm tắt thật ngắn gọn đoạn văn sau trong 1 câu ngắn (tối đa 15 từ) bằng tiếng Việt."},
                     {"role": "user", "content": text},
                 ],
-                max_tokens=150,
+                max_tokens=60,
                 timeout=15,
             )
-            return resp.choices[0].message.content.strip()
+            summary = resp.choices[0].message.content.strip()
+            if len(summary) <= len(text) * 2:
+                return summary
+            return summary[:len(text) * 2]
         except Exception as e:
             print(f"  ⚠️  LLM summarize failed: {e}")
 
