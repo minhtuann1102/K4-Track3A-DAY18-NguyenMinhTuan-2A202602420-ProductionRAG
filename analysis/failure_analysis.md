@@ -10,10 +10,10 @@
 
 | Metric | Naive Baseline | Production | Δ |
 |--------|---------------|------------|---|
-| Faithfulness | 1.0000 | 1.0000 | +0.0000 |
-| Answer Relevancy | 0.8576 | 0.8159 | -0.0417 |
+| Faithfulness | 0.8214 | 0.8636 | +0.0422 |
+| Answer Relevancy | 0.6843 | 0.6746 | -0.0097 |
 | Context Precision | 0.9917 | 0.9917 | +0.0000 |
-| Context Recall | 0.8592 | 0.7902 | -0.0690 |
+| Context Recall | 0.8592 | 0.7919 | -0.0673 |
 
 ---
 

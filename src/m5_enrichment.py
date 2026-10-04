@@ -160,14 +160,32 @@ def extract_metadata(text: str) -> dict:
 
 # ─── Combined Single-Call Mode ───────────────────────────
 
+_RATE_LIMITED = False
 
-def _enrich_single_call(text: str, source: str) -> dict:
+
+def _extractive_fallback(text: str, source: str = "") -> dict:
+    import re
+    sentences = [s.strip() for s in text.replace("\n", " ").split(". ") if s.strip()]
+    first_two = ". ".join(sentences[:2]) if sentences else text
+    summary = first_two + ("" if first_two.endswith(".") else ".")
+    q_sents = [s.strip() for s in re.split(r'[.!?\n]', text) if len(s.strip()) > 5]
+    questions = [f"{s.rstrip('.?! ')} như thế nào?" for s in q_sents[:3]]
+    return {
+        "summary": summary,
+        "questions": questions,
+        "context": f"Trích từ tài liệu {source}." if source else "",
+        "metadata": {"source": source, "category": "policy", "language": "vi"},
+    }
+
+
+def _enrich_single_call(text: str, source: str = "") -> dict:
     """Single LLM call to get summary + questions + context + metadata.
 
     ⚠️ Cost optimization: 1 API call thay vì 4 calls riêng lẻ.
     """
+    global _RATE_LIMITED
     client, model = get_llm_client()
-    if client:
+    if client and not _RATE_LIMITED:
         try:
             import json as _json
             resp = client.chat.completions.create(
@@ -188,14 +206,13 @@ def _enrich_single_call(text: str, source: str) -> dict:
             )
             return _json.loads(resp.choices[0].message.content)
         except Exception as e:
-            print(f"  ⚠️  Enrichment API failed: {e}")
+            if "429" in str(e) or "quota" in str(e).lower() or "resource_exhausted" in str(e).lower():
+                _RATE_LIMITED = True
+                print("  ⚠️  Gemini rate limit reached (15 RPM free tier). Switching to extractive fallback...")
+            else:
+                print(f"  ⚠️  Enrichment API failed: {e}")
 
-    return {
-        "summary": summarize_chunk(text),
-        "questions": generate_hypothesis_questions(text),
-        "context": f"Trích từ tài liệu {source}." if source else "",
-        "metadata": extract_metadata(text),
-    }
+    return _extractive_fallback(text, source)
 
 
 # ─── Full Enrichment Pipeline ────────────────────────────
